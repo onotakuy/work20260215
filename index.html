@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub Commit Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --border: #30363d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --green-1: #0e4429;
+      --green-2: #006d32;
+      --green-3: #26a641;
+      --green-4: #39d353;
+      --danger: #f85149;
+      --success: #3fb950;
+      --warning: #d29922;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      text-align: center;
+      padding: 40px 0 32px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    header h1 .icon {
+      margin-right: 8px;
+    }
+
+    header p {
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+
+    .search-section {
+      display: flex;
+      gap: 12px;
+      max-width: 700px;
+      margin: 0 auto 40px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .search-section input {
+      flex: 1;
+      min-width: 280px;
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-section input:focus {
+      border-color: var(--accent);
+    }
+
+    .search-section input::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .token-input-wrapper {
+      position: relative;
+      min-width: 200px;
+    }
+
+    .token-input-wrapper input {
+      width: 100%;
+      padding-right: 36px;
+    }
+
+    .token-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 4px;
+    }
+
+    .btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .btn-primary {
+      background: #238636;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #2ea043;
+    }
+
+    .btn-primary:disabled {
+      background: #21262d;
+      color: var(--text-secondary);
+      cursor: not-allowed;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 0;
+      display: none;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: var(--text-secondary);
+    }
+
+    .error-message {
+      text-align: center;
+      color: var(--danger);
+      padding: 16px;
+      display: none;
+      background: rgba(248, 81, 73, 0.1);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+      border-radius: 6px;
+      max-width: 700px;
+      margin: 0 auto 24px;
+    }
+
+    .error-message.active {
+      display: block;
+    }
+
+    .dashboard {
+      display: none;
+    }
+
+    .dashboard.active {
+      display: block;
+    }
+
+    .repo-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .repo-header h2 {
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+
+    .repo-header h2 a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .repo-header h2 a:hover {
+      text-decoration: underline;
+    }
+
+    .repo-meta {
+      display: flex;
+      gap: 16px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-left: auto;
+    }
+
+    .stat-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-card .label {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 560px) {
+      .chart-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .chart-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+    }
+
+    .chart-card h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+
+    .chart-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    /* Heatmap */
+    .heatmap-section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+
+    .heatmap-section h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .heatmap-container {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: fit-content;
+    }
+
+    .heatmap-row {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+
+    .heatmap-day-label {
+      width: 30px;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      text-align: right;
+      padding-right: 6px;
+      flex-shrink: 0;
+    }
+
+    .heatmap-cell {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--bg-tertiary);
+      cursor: pointer;
+      transition: outline 0.1s;
+    }
+
+    .heatmap-cell:hover {
+      outline: 1px solid var(--text-secondary);
+    }
+
+    .heatmap-cell.level-1 { background: var(--green-1); }
+    .heatmap-cell.level-2 { background: var(--green-2); }
+    .heatmap-cell.level-3 { background: var(--green-3); }
+    .heatmap-cell.level-4 { background: var(--green-4); }
+
+    .heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 12px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .heatmap-legend .heatmap-cell {
+      cursor: default;
+    }
+
+    .heatmap-months {
+      display: flex;
+      padding-left: 36px;
+      margin-bottom: 4px;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+    }
+
+    .heatmap-month-label {
+      text-align: left;
+    }
+
+    /* Commit timeline */
+    .timeline-section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .timeline-section h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .timeline-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .timeline-controls .btn {
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .timeline-controls .btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .commit-list {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .commit-item {
+      display: flex;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+
+    .commit-item:last-child {
+      border-bottom: none;
+    }
+
+    .commit-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .commit-avatar img {
+      width: 100%;
+      height: 100%;
+    }
+
+    .commit-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .commit-message {
+      font-size: 0.9rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .commit-message a {
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .commit-message a:hover {
+      color: var(--accent);
+    }
+
+    .commit-meta {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .commit-sha {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .commit-sha:hover {
+      text-decoration: underline;
+    }
+
+    /* Tooltip */
+    .tooltip {
+      position: fixed;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      color: var(--text-primary);
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      white-space: nowrap;
+    }
+
+    .tooltip.visible {
+      display: block;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border);
+    }
+
+    footer {
+      text-align: center;
+      padding: 40px 0 24px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><span class="icon">&#x1F4CA;</span>GitHub Commit Visualizer</h1>
+      <p>リポジトリのコミット履歴を解析して視覚化します</p>
+    </header>
+
+    <div class="search-section">
+      <input type="text" id="repoInput" placeholder="owner/repo (例: facebook/react)" spellcheck="false">
+      <div class="token-input-wrapper">
+        <input type="password" id="tokenInput" placeholder="GitHub Token (任意)">
+        <button class="token-toggle" id="tokenToggle" title="トークンの表示切替">&#x1F441;</button>
+      </div>
+      <button class="btn btn-primary" id="analyzeBtn">解析</button>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p class="loading-text" id="loadingText">コミット履歴を取得中...</p>
+    </div>
+
+    <div class="dashboard" id="dashboard">
+      <div class="repo-header" id="repoHeader">
+        <h2 id="repoName"></h2>
+        <div class="repo-meta" id="repoMeta"></div>
+      </div>
+
+      <div class="stat-cards" id="statCards"></div>
+
+      <div class="heatmap-section">
+        <h3>コミットヒートマップ（過去1年間）</h3>
+        <div id="heatmapMonths" class="heatmap-months"></div>
+        <div id="heatmap" class="heatmap-container"></div>
+        <div class="heatmap-legend">
+          <span>Less</span>
+          <div class="heatmap-cell"></div>
+          <div class="heatmap-cell level-1"></div>
+          <div class="heatmap-cell level-2"></div>
+          <div class="heatmap-cell level-3"></div>
+          <div class="heatmap-cell level-4"></div>
+          <span>More</span>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>著者別コミット数</h3>
+          <div class="chart-wrapper">
+            <canvas id="authorChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>曜日別コミット分布</h3>
+          <div class="chart-wrapper">
+            <canvas id="dayChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>時間帯別コミット分布</h3>
+          <div class="chart-wrapper">
+            <canvas id="hourChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>月別コミット推移</h3>
+          <div class="chart-wrapper">
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-section">
+        <h3>コミットタイムライン</h3>
+        <div class="timeline-controls" id="timelineControls">
+          <button class="btn active" data-filter="all">すべて</button>
+        </div>
+        <div class="commit-list" id="commitList"></div>
+      </div>
+    </div>
+
+    <footer>
+      <p>GitHub Commit Visualizer &mdash; GitHub REST API を使用</p>
+    </footer>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const API_BASE = 'https://api.github.com';
+      const MAX_PAGES = 10;
+      const PER_PAGE = 100;
+
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
+
+      const repoInput = $('#repoInput');
+      const tokenInput = $('#tokenInput');
+      const tokenToggle = $('#tokenToggle');
+      const analyzeBtn = $('#analyzeBtn');
+      const loading = $('#loading');
+      const loadingText = $('#loadingText');
+      const errorMessage = $('#errorMessage');
+      const dashboard = $('#dashboard');
+      const tooltip = $('#tooltip');
+
+      let chartInstances = {};
+
+      // Token visibility toggle
+      tokenToggle.addEventListener('click', () => {
+        const isPassword = tokenInput.type === 'password';
+        tokenInput.type = isPassword ? 'text' : 'password';
+      });
+
+      // Enter key
+      repoInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') analyzeBtn.click();
+      });
+
+      tokenInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') analyzeBtn.click();
+      });
+
+      analyzeBtn.addEventListener('click', analyze);
+
+      // Tooltip
+      document.addEventListener('mousemove', (e) => {
+        if (tooltip.classList.contains('visible')) {
+          tooltip.style.left = e.clientX + 12 + 'px';
+          tooltip.style.top = e.clientY - 8 + 'px';
+        }
+      });
+
+      function showTooltip(text) {
+        tooltip.textContent = text;
+        tooltip.classList.add('visible');
+      }
+
+      function hideTooltip() {
+        tooltip.classList.remove('visible');
+      }
+
+      function showError(msg) {
+        errorMessage.textContent = msg;
+        errorMessage.classList.add('active');
+      }
+
+      function hideError() {
+        errorMessage.classList.remove('active');
+      }
+
+      function showLoading(text) {
+        loadingText.textContent = text || 'コミット履歴を取得中...';
+        loading.classList.add('active');
+      }
+
+      function hideLoading() {
+        loading.classList.remove('active');
+      }
+
+      function parseRepoInput(input) {
+        input = input.trim();
+        // Handle full URL
+        const urlMatch = input.match(/github\.com\/([^/]+)\/([^/]+)/);
+        if (urlMatch) return `${urlMatch[1]}/${urlMatch[2].replace(/\.git$/, '')}`;
+        // Handle owner/repo
+        const parts = input.split('/');
+        if (parts.length === 2 && parts[0] && parts[1]) return input;
+        return null;
+      }
+
+      function getHeaders() {
+        const headers = {
+          'Accept': 'application/vnd.github+json',
+        };
+        const token = tokenInput.value.trim();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        return headers;
+      }
+
+      async function fetchJSON(url) {
+        const res = await fetch(url, { headers: getHeaders() });
+        if (!res.ok) {
+          if (res.status === 403) {
+            const remaining = res.headers.get('X-RateLimit-Remaining');
+            if (remaining === '0') {
+              throw new Error('GitHub API レート制限に達しました。トークンを入力するか、しばらく待ってから再試行してください。');
+            }
+          }
+          if (res.status === 404) {
+            throw new Error('リポジトリが見つかりません。公開リポジトリか確認してください。');
+          }
+          throw new Error(`API Error: ${res.status} ${res.statusText}`);
+        }
+        return {
+          data: await res.json(),
+          headers: res.headers,
+        };
+      }
+
+      async function fetchAllCommits(repo) {
+        const allCommits = [];
+        let page = 1;
+
+        while (page <= MAX_PAGES) {
+          showLoading(`コミット履歴を取得中... (ページ ${page})`);
+          const url = `${API_BASE}/repos/${repo}/commits?per_page=${PER_PAGE}&page=${page}`;
+          const { data } = await fetchJSON(url);
+
+          if (!data.length) break;
+          allCommits.push(...data);
+
+          if (data.length < PER_PAGE) break;
+          page++;
+        }
+
+        return allCommits;
+      }
+
+      async function fetchRepoInfo(repo) {
+        const { data } = await fetchJSON(`${API_BASE}/repos/${repo}`);
+        return data;
+      }
+
+      async function analyze() {
+        const repo = parseRepoInput(repoInput.value);
+        if (!repo) {
+          showError('正しい形式で入力してください (例: owner/repo)');
+          return;
+        }
+
+        hideError();
+        dashboard.classList.remove('active');
+        analyzeBtn.disabled = true;
+
+        try {
+          showLoading('リポジトリ情報を取得中...');
+          const [repoInfo, commits] = await Promise.all([
+            fetchRepoInfo(repo),
+            fetchAllCommits(repo),
+          ]);
+
+          if (commits.length === 0) {
+            showError('コミットが見つかりません。');
+            return;
+          }
+
+          hideLoading();
+          renderDashboard(repo, repoInfo, commits);
+          dashboard.classList.add('active');
+        } catch (err) {
+          hideLoading();
+          showError(err.message);
+        } finally {
+          analyzeBtn.disabled = false;
+        }
+      }
+
+      function renderDashboard(repo, repoInfo, commits) {
+        // Destroy old charts
+        Object.values(chartInstances).forEach(c => c.destroy());
+        chartInstances = {};
+
+        renderRepoHeader(repo, repoInfo);
+        const stats = computeStats(commits);
+        renderStatCards(stats, commits);
+        renderHeatmap(commits);
+        renderAuthorChart(stats);
+        renderDayChart(stats);
+        renderHourChart(stats);
+        renderMonthlyChart(stats);
+        renderTimeline(repo, commits, stats);
+      }
+
+      function renderRepoHeader(repo, info) {
+        $('#repoName').innerHTML = `<a href="https://github.com/${repo}" target="_blank" rel="noopener">${repo}</a>`;
+        const meta = [];
+        if (info.language) meta.push(info.language);
+        if (info.stargazers_count != null) meta.push(`\u2B50 ${info.stargazers_count.toLocaleString()}`);
+        if (info.forks_count != null) meta.push(`\uD83C\uDF74 ${info.forks_count.toLocaleString()}`);
+        $('#repoMeta').textContent = meta.join('  |  ');
+      }
+
+      function computeStats(commits) {
+        const authorCounts = {};
+        const dayCounts = [0, 0, 0, 0, 0, 0, 0]; // Sun-Sat
+        const hourCounts = new Array(24).fill(0);
+        const monthlyCounts = {};
+        const authorAvatars = {};
+
+        commits.forEach(c => {
+          const authorName = c.commit.author?.name || 'Unknown';
+          authorCounts[authorName] = (authorCounts[authorName] || 0) + 1;
+
+          if (c.author?.avatar_url) {
+            authorAvatars[authorName] = c.author.avatar_url;
+          }
+
+          const date = new Date(c.commit.author?.date || c.commit.committer?.date);
+          dayCounts[date.getDay()]++;
+          hourCounts[date.getHours()]++;
+
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          monthlyCounts[monthKey] = (monthlyCounts[monthKey] || 0) + 1;
+        });
+
+        // Find date range
+        const dates = commits.map(c => new Date(c.commit.author?.date || c.commit.committer?.date));
+        const minDate = new Date(Math.min(...dates));
+        const maxDate = new Date(Math.max(...dates));
+        const spanDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
+
+        return {
+          authorCounts,
+          dayCounts,
+          hourCounts,
+          monthlyCounts,
+          authorAvatars,
+          minDate,
+          maxDate,
+          spanDays,
+        };
+      }
+
+      function renderStatCards(stats, commits) {
+        const uniqueAuthors = Object.keys(stats.authorCounts).length;
+        const topAuthor = Object.entries(stats.authorCounts).sort((a, b) => b[1] - a[1])[0];
+        const avgPerDay = stats.spanDays > 0 ? (commits.length / stats.spanDays).toFixed(1) : 0;
+
+        const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+        const busiestDayIdx = stats.dayCounts.indexOf(Math.max(...stats.dayCounts));
+        const busiestDay = dayNames[busiestDayIdx];
+
+        const cards = [
+          { value: commits.length.toLocaleString(), label: '総コミット数' },
+          { value: uniqueAuthors, label: 'コントリビューター数' },
+          { value: avgPerDay, label: '1日あたりの平均コミット' },
+          { value: topAuthor ? topAuthor[0] : '-', label: '最多コミッター' },
+          { value: busiestDay + '曜日', label: '最もアクティブな曜日' },
+          { value: stats.spanDays + '日', label: '期間' },
+        ];
+
+        const container = $('#statCards');
+        container.innerHTML = cards.map(c => `
+          <div class="stat-card">
+            <div class="value">${c.value}</div>
+            <div class="label">${c.label}</div>
+          </div>
+        `).join('');
+      }
+
+      function renderHeatmap(commits) {
+        const heatmapEl = $('#heatmap');
+        const monthsEl = $('#heatmapMonths');
+        heatmapEl.innerHTML = '';
+        monthsEl.innerHTML = '';
+
+        // Build date -> count map for last 365 days
+        const now = new Date();
+        const oneYearAgo = new Date(now);
+        oneYearAgo.setFullYear(now.getFullYear() - 1);
+        oneYearAgo.setDate(oneYearAgo.getDate() - oneYearAgo.getDay()); // Start on Sunday
+
+        const dateCounts = {};
+        commits.forEach(c => {
+          const d = new Date(c.commit.author?.date || c.commit.committer?.date);
+          const key = d.toISOString().slice(0, 10);
+          dateCounts[key] = (dateCounts[key] || 0) + 1;
+        });
+
+        // Find max for scaling
+        const counts = Object.values(dateCounts);
+        const maxCount = Math.max(...counts, 1);
+
+        function getLevel(count) {
+          if (count === 0) return 0;
+          const ratio = count / maxCount;
+          if (ratio <= 0.25) return 1;
+          if (ratio <= 0.5) return 2;
+          if (ratio <= 0.75) return 3;
+          return 4;
+        }
+
+        // Build 7 rows (Sun-Sat) x N weeks
+        const dayLabels = ['日', '', '火', '', '木', '', '土'];
+        const weeks = [];
+        const monthPositions = [];
+        let currentDate = new Date(oneYearAgo);
+        let prevMonth = -1;
+
+        while (currentDate <= now) {
+          const weekIdx = Math.floor((currentDate - oneYearAgo) / (7 * 24 * 60 * 60 * 1000));
+          if (!weeks[weekIdx]) weeks[weekIdx] = new Array(7).fill(null);
+
+          const dayOfWeek = currentDate.getDay();
+          const dateStr = currentDate.toISOString().slice(0, 10);
+          const count = dateCounts[dateStr] || 0;
+          weeks[weekIdx][dayOfWeek] = { date: dateStr, count, level: getLevel(count) };
+
+          const month = currentDate.getMonth();
+          if (month !== prevMonth) {
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            monthPositions.push({ weekIdx, name: monthNames[month] });
+            prevMonth = month;
+          }
+
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        // Render month labels
+        const totalWeeks = weeks.length;
+        const cellSize = 14; // 12px cell + 2px gap
+        monthPositions.forEach(mp => {
+          const span = document.createElement('span');
+          span.className = 'heatmap-month-label';
+          span.style.position = 'absolute';
+          span.style.left = (mp.weekIdx * cellSize + 36) + 'px';
+          span.textContent = mp.name;
+          monthsEl.appendChild(span);
+        });
+        monthsEl.style.position = 'relative';
+        monthsEl.style.height = '18px';
+        monthsEl.style.width = (totalWeeks * cellSize + 36) + 'px';
+
+        // Render grid
+        for (let day = 0; day < 7; day++) {
+          const row = document.createElement('div');
+          row.className = 'heatmap-row';
+
+          const label = document.createElement('span');
+          label.className = 'heatmap-day-label';
+          label.textContent = dayLabels[day];
+          row.appendChild(label);
+
+          for (let week = 0; week < weeks.length; week++) {
+            const cell = document.createElement('div');
+            cell.className = 'heatmap-cell';
+            const data = weeks[week]?.[day];
+            if (data) {
+              if (data.level > 0) cell.classList.add(`level-${data.level}`);
+              cell.addEventListener('mouseenter', () => {
+                showTooltip(`${data.date}: ${data.count} コミット`);
+              });
+              cell.addEventListener('mouseleave', hideTooltip);
+            }
+            row.appendChild(cell);
+          }
+
+          heatmapEl.appendChild(row);
+        }
+      }
+
+      function chartColors(count) {
+        const palette = [
+          '#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff',
+          '#f778ba', '#79c0ff', '#56d364', '#e3b341', '#ff7b72',
+          '#d2a8ff', '#ff9bce', '#a5d6ff', '#7ee787', '#f0cc59',
+        ];
+        const result = [];
+        for (let i = 0; i < count; i++) result.push(palette[i % palette.length]);
+        return result;
+      }
+
+      function renderAuthorChart(stats) {
+        const sorted = Object.entries(stats.authorCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 15);
+
+        const ctx = $('#authorChart').getContext('2d');
+        chartInstances.author = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: sorted.map(e => e[0]),
+            datasets: [{
+              label: 'コミット数',
+              data: sorted.map(e => e[1]),
+              backgroundColor: chartColors(sorted.length),
+              borderRadius: 4,
+            }],
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              x: {
+                ticks: { color: '#8b949e' },
+                grid: { color: '#21262d' },
+              },
+              y: {
+                ticks: { color: '#e6edf3', font: { size: 11 } },
+                grid: { display: false },
+              },
+            },
+          },
+        });
+      }
+
+      function renderDayChart(stats) {
+        const dayNames = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
+        const ctx = $('#dayChart').getContext('2d');
+        chartInstances.day = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: dayNames,
+            datasets: [{
+              label: 'コミット数',
+              data: stats.dayCounts,
+              backgroundColor: stats.dayCounts.map((_, i) => (i === 0 || i === 6) ? '#f8514966' : '#58a6ff99'),
+              borderColor: stats.dayCounts.map((_, i) => (i === 0 || i === 6) ? '#f85149' : '#58a6ff'),
+              borderWidth: 1,
+              borderRadius: 4,
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#8b949e' }, grid: { display: false } },
+              y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+            },
+          },
+        });
+      }
+
+      function renderHourChart(stats) {
+        const labels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+        const ctx = $('#hourChart').getContext('2d');
+        chartInstances.hour = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'コミット数',
+              data: stats.hourCounts,
+              borderColor: '#58a6ff',
+              backgroundColor: 'rgba(88,166,255,0.1)',
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointBackgroundColor: '#58a6ff',
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: '#21262d' } },
+              y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+            },
+          },
+        });
+      }
+
+      function renderMonthlyChart(stats) {
+        const sorted = Object.entries(stats.monthlyCounts).sort((a, b) => a[0].localeCompare(b[0]));
+        const ctx = $('#monthlyChart').getContext('2d');
+        chartInstances.monthly = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: sorted.map(e => e[0]),
+            datasets: [{
+              label: 'コミット数',
+              data: sorted.map(e => e[1]),
+              borderColor: '#3fb950',
+              backgroundColor: 'rgba(63,185,80,0.1)',
+              fill: true,
+              tension: 0.3,
+              pointRadius: 4,
+              pointBackgroundColor: '#3fb950',
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: '#21262d' } },
+              y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+            },
+          },
+        });
+      }
+
+      function renderTimeline(repo, commits, stats) {
+        const controlsEl = $('#timelineControls');
+        const listEl = $('#commitList');
+
+        // Build author filter buttons
+        const topAuthors = Object.entries(stats.authorCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+
+        controlsEl.innerHTML = '<button class="btn active" data-filter="all">すべて</button>';
+        topAuthors.forEach(([name]) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.dataset.filter = name;
+          btn.textContent = name;
+          controlsEl.appendChild(btn);
+        });
+
+        function renderList(filter) {
+          const filtered = filter === 'all'
+            ? commits
+            : commits.filter(c => (c.commit.author?.name || 'Unknown') === filter);
+
+          listEl.innerHTML = filtered.slice(0, 100).map(c => {
+            const author = c.commit.author?.name || 'Unknown';
+            const date = new Date(c.commit.author?.date || c.commit.committer?.date);
+            const avatarUrl = c.author?.avatar_url || '';
+            const sha = c.sha.slice(0, 7);
+            const message = escapeHtml(c.commit.message.split('\n')[0]);
+            const relTime = relativeTime(date);
+
+            return `
+              <div class="commit-item">
+                <div class="commit-avatar">
+                  ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(author)}" loading="lazy">` : ''}
+                </div>
+                <div class="commit-info">
+                  <div class="commit-message">
+                    <a href="https://github.com/${repo}/commit/${c.sha}" target="_blank" rel="noopener">${message}</a>
+                  </div>
+                  <div class="commit-meta">${escapeHtml(author)} &middot; ${relTime}</div>
+                </div>
+                <a class="commit-sha" href="https://github.com/${repo}/commit/${c.sha}" target="_blank" rel="noopener">${sha}</a>
+              </div>
+            `;
+          }).join('');
+        }
+
+        controlsEl.addEventListener('click', (e) => {
+          const btn = e.target.closest('.btn');
+          if (!btn) return;
+          controlsEl.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          renderList(btn.dataset.filter);
+        });
+
+        renderList('all');
+      }
+
+      function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function relativeTime(date) {
+        const now = new Date();
+        const diff = now - date;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        const months = Math.floor(days / 30);
+        const years = Math.floor(days / 365);
+
+        if (years > 0) return `${years}年前`;
+        if (months > 0) return `${months}ヶ月前`;
+        if (days > 0) return `${days}日前`;
+        if (hours > 0) return `${hours}時間前`;
+        if (minutes > 0) return `${minutes}分前`;
+        return 'たった今';
+      }
+    })();
+  </script>
+</body>
+</html>
